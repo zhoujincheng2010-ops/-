@@ -6,6 +6,7 @@
     <title>DeepFlow Web</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body {
             background-color: #fdfbf7; /* Off-white / 米白色 */
@@ -59,10 +60,11 @@
                     </ul>
                 </div>
             </aside>
-            <aside class="bg-gray-50 w-64 md:static fixed inset-y-0 left-0 z-30 transform md:transform-none transition-transform" :class="{'-translate-x-full': !sidebarOpen && !isWide, 'translate-x-0': sidebarOpen || isWide}">
+            <aside v-show="!pagesSidebarHidden" class="bg-gray-50 w-64 md:static fixed inset-y-0 left-0 z-30 transform md:transform-none transition-transform" :class="{'-translate-x-full': !sidebarOpen && !isWide, 'translate-x-0': sidebarOpen || isWide}">
                 <div class="h-full flex flex-col border-r border-gray-200">
-                    <div class="p-3 border-b border-gray-200">
-                        <button @click="createPage" class="w-full px-3 py-2 bg-stone-700 hover:bg-stone-800 text-white rounded-md text-sm">➕ 新建页面</button>
+                    <div class="p-3 border-b border-gray-200 flex items-center gap-2">
+                        <button @click="createPage" class="flex-1 px-3 py-2 bg-stone-700 hover:bg-stone-800 text-white rounded-md text-sm">➕ 新建页面</button>
+                        <button @click="pagesSidebarHidden = true" class="px-3 py-2 bg-white hover:bg-gray-50 text-gray-600 rounded-md border border-gray-200 text-sm">隐藏</button>
                     </div>
                     <div class="flex-1 overflow-y-auto">
                         <ul class="divide-y divide-gray-100">
@@ -90,14 +92,19 @@
                 <div v-else class="space-y-10">
                     <div class="flex items-center gap-2">
                         <input v-model="currentPage.title" class="text-xl font-semibold bg-transparent border-b border-transparent focus:border-gray-300 focus:outline-none px-1 py-0.5" />
+                        <button v-if="pagesSidebarHidden" @click="pagesSidebarHidden = false" class="ml-2 text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-50">显示页面栏</button>
                     </div>
 
                     <div class="grid md:grid-cols-2 gap-6">
-                        <!-- Column C: 思维缓冲区单独成列 -->
+                        <!-- Column C: 思维缓冲区（仅文字输入 + Markdown 预览） -->
                         <section class="space-y-4">
                             <h2 class="text-xl font-bold text-gray-700">🧠 思维缓冲区</h2>
-                            <div class="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden">
-                                <textarea v-model="mindBuffer" class="w-full h-[80vh] p-4 bg-transparent resize-none focus:outline-none text-gray-600 placeholder-gray-400" placeholder="在这里卸载你的思绪，把混乱写下来..."></textarea>
+                            <div class="bg-white border border-gray-200 overflow-hidden">
+                                <textarea v-model="mindBuffer" class="w-full h-[calc(100vh-240px)] px-8 py-6 bg-transparent resize-none focus:outline-none text-gray-700 placeholder-gray-400 leading-7 text-[16px]" placeholder="在这里书写一整页的脑暴，支持 Markdown 语法..."></textarea>
+                                <div class="px-8 py-6 border-t border-gray-100">
+                                    <div class="text-sm text-gray-400 mb-3">Markdown 预览</div>
+                                    <div class="text-gray-800 leading-7" v-html="mindBufferHtml"></div>
+                                </div>
                             </div>
                         </section>
 
@@ -153,7 +160,7 @@
                                 </div>
                             </section>
 
-                            <section class="space-y-4">
+                            <section class="space-y-4 mt-24">
                                 <h2 class="text-xl font-bold text-gray-700">💎 丰饶之海</h2>
                                 <div class="flex gap-2">
                                     <input v-model="newIdeaInput" @keyup.enter="addIdea" type="text" placeholder="捕捉灵感..." class="flex-1 px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-100 focus:outline-none focus:ring-2 focus:ring-stone-200 transition-all placeholder-gray-400">
@@ -192,6 +199,7 @@
                 const sidebarOpen = ref(false);
                 const isWide = computed(() => window.innerWidth >= 768);
                 const toggleSidebar = () => { sidebarOpen.value = !sidebarOpen.value; };
+                const pagesSidebarHidden = ref(false);
                 const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
                 const formatDate = (ts) => {
                     const d = new Date(ts);
@@ -262,6 +270,13 @@
                 const mindBuffer = computed({
                     get: () => currentPage.value ? currentPage.value.content.brainDump : '',
                     set: (v) => { if (currentPage.value) currentPage.value.content.brainDump = v; }
+                });
+                const mindBufferHtml = computed(() => {
+                    try {
+                        return marked.parse(mindBuffer.value || '');
+                    } catch {
+                        return (mindBuffer.value || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    }
                 });
                 const tasks = computed({
                     get: () => currentPage.value ? currentPage.value.content.todos : [],
@@ -405,6 +420,7 @@
                     sidebarOpen,
                     isWide,
                     toggleSidebar,
+                    pagesSidebarHidden,
                     formatDate,
                     timelineLocked,
                     daysToRender,
@@ -413,6 +429,7 @@
                     weekdayZh,
                     isTodayStr,
                     mindBuffer,
+                    mindBufferHtml,
                     newTaskInput,
                     activeTasks,
                     completedTasks,
