@@ -30,6 +30,23 @@
 <body class="text-gray-800 min-h-screen py-10 px-4">
 
     <div id="app" class="max-w-2xl mx-auto space-y-12">
+        <div class="fixed left-4 top-10 w-64 z-10">
+            <div class="bg-white/80 backdrop-blur rounded-xl shadow-sm border border-stone-100 p-3 space-y-3">
+                <div class="flex items-center gap-2">
+                    <button @click="prevDay" class="w-9 h-9 flex items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+                        &lt;
+                    </button>
+                    <input type="date" v-model="selectedDate" class="flex-1 px-2 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-stone-200">
+                    <button @click="nextDay" class="w-9 h-9 flex items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+                        &gt;
+                    </button>
+                </div>
+                <button v-if="!isToday" @click="backToToday" class="w-full px-3 py-2 rounded-md bg-stone-700 text-white text-sm hover:bg-stone-800">
+                    回到今天
+                </button>
+                <div class="text-xs text-gray-400 text-center">当前日期：{{ selectedDate }}</div>
+            </div>
+        </div>
         
         <!-- 模块 1：思维缓冲区 -->
         <section class="space-y-4">
@@ -236,11 +253,26 @@
 
         createApp({
             setup() {
-                // --- 模块 1：思维缓冲区 ---
-                const mindBuffer = ref('');
+                const todayStr = () => new Date().toISOString().slice(0, 10);
+                const selectedDate = ref(todayStr());
+                const store = ref({});
+                const ensureDay = (d) => {
+                    if (!store.value[d]) {
+                        store.value[d] = { mindBuffer: '', tasks: [], ideas: [] };
+                    }
+                };
+                ensureDay(selectedDate.value);
 
-                // --- 模块 2：任务管理 ---
-                const tasks = ref([]);
+                const mindBuffer = computed({
+                    get: () => { ensureDay(selectedDate.value); return store.value[selectedDate.value].mindBuffer; },
+                    set: (v) => { ensureDay(selectedDate.value); store.value[selectedDate.value].mindBuffer = v; }
+                });
+
+                const tasks = computed({
+                    get: () => { ensureDay(selectedDate.value); return store.value[selectedDate.value].tasks; },
+                    set: (v) => { ensureDay(selectedDate.value); store.value[selectedDate.value].tasks = v; }
+                });
+
                 const newTaskInput = ref('');
                 const showCompleted = ref(false);
 
@@ -315,14 +347,8 @@
                     return `${month}-${day} ${hours}:${minutes}`;
                 };
 
-                // --- 数据导出与导入 ---
                 const exportData = () => {
-                    const data = {
-                        mindBuffer: mindBuffer.value,
-                        tasks: tasks.value,
-                        ideas: ideas.value,
-                        exportDate: new Date().toISOString()
-                    };
+                    const data = { store: store.value, selectedDate: selectedDate.value, version: 'v2', exportDate: new Date().toISOString() };
                     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -341,9 +367,8 @@
                         try {
                             const parsed = JSON.parse(e.target.result);
                             if (confirm(`准备导入数据 (备份时间: ${parsed.exportDate || '未知'})？\n这将覆盖当前页面的所有数据！`)) {
-                                if (parsed.mindBuffer !== undefined) mindBuffer.value = parsed.mindBuffer;
-                                if (parsed.tasks) tasks.value = parsed.tasks;
-                                if (parsed.ideas) ideas.value = parsed.ideas;
+                                if (parsed.store) store.value = parsed.store;
+                                if (parsed.selectedDate) selectedDate.value = parsed.selectedDate;
                                 alert('数据导入成功！');
                             }
                         } catch (err) {
@@ -352,46 +377,70 @@
                         }
                     };
                     reader.readAsText(file);
-                    // Reset input so same file can be selected again
                     event.target.value = '';
                 };
 
-                // --- 持久化 ---
-                const STORAGE_KEY = 'deepflow_data_v1';
+                const STORAGE_KEY_V2 = 'deepflow_store_v2';
+                const STORAGE_KEY_V1 = 'deepflow_data_v1';
 
                 const loadData = () => {
-                    const data = localStorage.getItem(STORAGE_KEY);
-                    if (data) {
+                    const v2 = localStorage.getItem(STORAGE_KEY_V2);
+                    if (v2) {
                         try {
-                            const parsed = JSON.parse(data);
-                            if (parsed.mindBuffer) mindBuffer.value = parsed.mindBuffer;
-                            if (parsed.tasks) tasks.value = parsed.tasks;
-                            if (parsed.ideas) ideas.value = parsed.ideas;
+                            const parsed = JSON.parse(v2);
+                            store.value = parsed;
                         } catch (e) {
                             console.error('Failed to load data', e);
                         }
+                    } else {
+                        const v1 = localStorage.getItem(STORAGE_KEY_V1);
+                        if (v1) {
+                            try {
+                                const old = JSON.parse(v1);
+                                const d = todayStr();
+                                store.value[d] = {
+                                    mindBuffer: old.mindBuffer || '',
+                                    tasks: old.tasks || [],
+                                    ideas: old.ideas || []
+                                };
+                            } catch (e) {
+                                console.error('Failed to migrate data', e);
+                            }
+                        }
                     }
+                    ensureDay(selectedDate.value);
                 };
 
                 const saveData = () => {
-                    const data = {
-                        mindBuffer: mindBuffer.value,
-                        tasks: tasks.value,
-                        ideas: ideas.value
-                    };
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(store.value));
                 };
 
-                // 监听变化并保存
-                watch([mindBuffer, tasks, ideas], () => {
-                    saveData();
-                }, { deep: true });
+                watch(store, () => { saveData(); }, { deep: true });
+                watch(selectedDate, (d) => { ensureDay(d); });
+
+                const prevDay = () => {
+                    const dt = new Date(selectedDate.value);
+                    dt.setDate(dt.getDate() - 1);
+                    selectedDate.value = dt.toISOString().slice(0,10);
+                };
+                const nextDay = () => {
+                    const dt = new Date(selectedDate.value);
+                    dt.setDate(dt.getDate() + 1);
+                    selectedDate.value = dt.toISOString().slice(0,10);
+                };
+                const backToToday = () => { selectedDate.value = todayStr(); };
+                const isToday = computed(() => selectedDate.value === todayStr());
 
                 onMounted(() => {
                     loadData();
                 });
 
                 return {
+                    selectedDate,
+                    prevDay,
+                    nextDay,
+                    backToToday,
+                    isToday,
                     mindBuffer,
                     newTaskInput,
                     activeTasks,
