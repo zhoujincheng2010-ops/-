@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepFlow Web</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body {
+            background-color: #fdfbf7; /* Off-white / 米白色 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        }
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.3s ease;
+        }
+        .fade-enter-from, .fade-leave-to {
+            opacity: 0;
+        }
+        /* Custom scrollbar for textarea if needed, keeping it subtle */
+        textarea::-webkit-scrollbar {
+            width: 8px;
+        }
+        textarea::-webkit-scrollbar-thumb {
+            background-color: #e5e7eb;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="text-gray-800 min-h-screen py-10 px-4">
+
+    <div id="app" class="max-w-2xl mx-auto space-y-12">
+        
+        <!-- 模块 1：思维缓冲区 -->
+        <section class="space-y-4">
+            <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2">
+                🧠 思维缓冲区
+            </h2>
+            <div class="bg-white/50 rounded-xl shadow-sm border border-stone-100 overflow-hidden focus-within:ring-2 focus-within:ring-stone-200 transition-all duration-300">
+                <textarea 
+                    v-model="mindBuffer"
+                    class="w-full h-40 p-4 bg-transparent resize-none focus:outline-none text-gray-600 placeholder-gray-400"
+                    placeholder="在这里卸载你的思绪，把混乱写下来..."
+                ></textarea>
+            </div>
+        </section>
+
+        <!-- 模块 2：你的每一步都是在改变世界 -->
+        <section class="space-y-6">
+            <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2">
+                ⚡ 你的每一步都是在改变世界
+            </h2>
+            
+            <!-- 任务输入框 -->
+            <div class="relative group">
+                <input 
+                    v-model="newTaskInput"
+                    @keyup.enter="addTask"
+                    type="text" 
+                    placeholder="下一步要做什么？(回车添加)" 
+                    class="w-full px-4 py-3 bg-white rounded-lg shadow-sm border border-gray-100 focus:outline-none focus:ring-2 focus:ring-stone-200 transition-all placeholder-gray-400"
+                >
+                <div class="absolute right-3 top-3 text-gray-300 text-sm hidden group-focus-within:block">
+                    Enter ↵
+                </div>
+            </div>
+
+            <!-- 任务列表 -->
+            <div class="space-y-3">
+                <!-- 进行中的任务 -->
+                <div v-if="activeTasks.length === 0 && completedTasks.length === 0" class="text-center text-gray-400 py-8 text-sm italic">
+                    静如止水，动如脱兔。
+                </div>
+
+                <div v-for="task in activeTasks" :key="task.id" class="group bg-white rounded-lg p-3 shadow-sm border border-gray-50 hover:shadow-md transition-all duration-200">
+                    <div class="flex items-start gap-3">
+                        <!-- Checkbox -->
+                        <div class="pt-1">
+                            <input 
+                                type="checkbox" 
+                                v-model="task.completed"
+                                class="w-5 h-5 rounded border-gray-300 text-stone-600 focus:ring-stone-200 cursor-pointer"
+                            >
+                        </div>
+                        
+                        <!-- Content -->
+                        <div class="flex-1 min-w-0">
+                            <div class="text-gray-700 break-words leading-relaxed">
+                                {{ task.text }}
+                            </div>
+
+                            <!-- 子任务区域 -->
+                            <div v-if="task.showSubtasks" class="mt-3 pl-1 space-y-2 border-l-2 border-gray-100 ml-1">
+                                <div v-for="subtask in task.subtasks" :key="subtask.id" class="flex items-center gap-2">
+                                    <input 
+                                        type="checkbox" 
+                                        v-model="subtask.completed"
+                                        class="w-4 h-4 rounded border-gray-300 text-stone-500 focus:ring-stone-200 cursor-pointer"
+                                    >
+                                    <span :class="{'line-through text-gray-400': subtask.completed, 'text-gray-600': !subtask.completed}" class="text-sm flex-1 break-words">
+                                        {{ subtask.text }}
+                                    </span>
+                                    <button @click="deleteSubtask(task, subtask.id)" class="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity px-1">
+                                        &times;
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-2 pt-1">
+                                    <input 
+                                        type="text" 
+                                        v-model="task.newSubtaskInput"
+                                        @keyup.enter="addSubtask(task)"
+                                        placeholder="添加子任务..."
+                                        class="text-sm w-full bg-transparent border-b border-transparent focus:border-gray-200 focus:outline-none placeholder-gray-400 py-1"
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add Subtask Button -->
+                        <button 
+                            @click="toggleSubtasks(task)"
+                            class="text-gray-400 hover:text-stone-600 p-1 rounded hover:bg-gray-50 transition-colors"
+                            title="添加/展开子任务"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        
+                        <!-- Delete Task Button (Hover only) -->
+                        <button 
+                            @click="deleteTask(task.id)"
+                            class="text-gray-300 hover:text-red-400 p-1 rounded hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                            title="删除任务"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 已完成任务折叠面板 -->
+                <div v-if="completedTasks.length > 0" class="mt-8">
+                    <button 
+                        @click="showCompleted = !showCompleted"
+                        class="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors w-full py-2"
+                    >
+                        <svg 
+                            class="w-4 h-4 transition-transform duration-200" 
+                            :class="{'rotate-90': showCompleted}"
+                            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                        >
+                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                        </svg>
+                        已完成 ({{ completedTasks.length }})
+                    </button>
+                    
+                    <div v-show="showCompleted" class="space-y-2 mt-2 pl-2">
+                        <div v-for="task in completedTasks" :key="task.id" class="flex items-center gap-3 opacity-60 hover:opacity-100 transition-opacity p-2 rounded-lg hover:bg-gray-50">
+                            <input 
+                                type="checkbox" 
+                                v-model="task.completed"
+                                class="w-5 h-5 rounded border-gray-300 text-stone-600 focus:ring-stone-200 cursor-pointer"
+                            >
+                            <span class="line-through text-gray-400 flex-1">{{ task.text }}</span>
+                             <button @click="deleteTask(task.id)" class="text-gray-300 hover:text-red-400 p-1">
+                                &times;
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 模块 3：丰饶之海 -->
+        <section class="space-y-4">
+            <h2 class="text-xl font-bold text-gray-700 flex items-center gap-2">
+                💎 丰饶之海
+            </h2>
+            
+            <div class="flex gap-2">
+                <input 
+                    v-model="newIdeaInput"
+                    @keyup.enter="addIdea"
+                    type="text" 
+                    placeholder="捕捉灵感..." 
+                    class="flex-1 px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-100 focus:outline-none focus:ring-2 focus:ring-stone-200 transition-all placeholder-gray-400"
+                >
+                <button 
+                    @click="addIdea"
+                    class="px-6 py-2 bg-stone-700 hover:bg-stone-800 text-white rounded-lg shadow-sm transition-colors duration-200 font-medium text-sm"
+                >
+                    记录
+                </button>
+            </div>
+
+            <div class="space-y-3 mt-4">
+                <transition-group name="fade">
+                    <div v-for="idea in ideas" :key="idea.id" class="bg-white p-4 rounded-lg shadow-sm border border-gray-50 flex flex-col gap-1 relative group">
+                        <div class="text-gray-700 leading-relaxed">{{ idea.content }}</div>
+                        <div class="text-xs text-gray-400 font-mono text-right mt-1">{{ formatTime(idea.timestamp) }}</div>
+                        <button 
+                            @click="deleteIdea(idea.id)"
+                            class="absolute top-2 right-2 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </transition-group>
+                <div v-if="ideas.length === 0" class="text-center text-gray-300 text-sm py-4">
+                    暂无灵感记录
+                </div>
+            </div>
+        </section>
+
+        <footer class="text-center text-gray-300 text-xs py-8 space-y-4">
+            <div>DeepFlow Web &copy; {{ new Date().getFullYear() }}</div>
+            
+            <!-- 数据备份与恢复 -->
+            <div class="flex justify-center gap-4 opacity-50 hover:opacity-100 transition-opacity">
+                <button @click="exportData" class="hover:text-stone-600 underline">导出数据备份</button>
+                <div class="relative">
+                    <button class="hover:text-stone-600 underline">导入数据恢复</button>
+                    <input type="file" @change="importData" accept=".json" class="absolute inset-0 opacity-0 cursor-pointer">
+                </div>
+            </div>
+        </footer>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                // --- 模块 1：思维缓冲区 ---
+                const mindBuffer = ref('');
+
+                // --- 模块 2：任务管理 ---
+                const tasks = ref([]);
+                const newTaskInput = ref('');
+                const showCompleted = ref(false);
+
+                const activeTasks = computed(() => tasks.value.filter(t => !t.completed));
+                const completedTasks = computed(() => tasks.value.filter(t => t.completed));
+
+                const addTask = () => {
+                    const text = newTaskInput.value.trim();
+                    if (!text) return;
+                    
+                    tasks.value.unshift({
+                        id: Date.now(),
+                        text: text,
+                        completed: false,
+                        subtasks: [],
+                        showSubtasks: false,
+                        newSubtaskInput: ''
+                    });
+                    newTaskInput.value = '';
+                };
+
+                const deleteTask = (id) => {
+                    tasks.value = tasks.value.filter(t => t.id !== id);
+                };
+
+                const toggleSubtasks = (task) => {
+                    task.showSubtasks = !task.showSubtasks;
+                };
+
+                const addSubtask = (task) => {
+                    const text = task.newSubtaskInput.trim();
+                    if (!text) return;
+
+                    task.subtasks.push({
+                        id: Date.now() + Math.random(),
+                        text: text,
+                        completed: false
+                    });
+                    task.newSubtaskInput = '';
+                };
+
+                const deleteSubtask = (task, subtaskId) => {
+                    task.subtasks = task.subtasks.filter(st => st.id !== subtaskId);
+                };
+
+                // --- 模块 3：丰饶之海 ---
+                const ideas = ref([]);
+                const newIdeaInput = ref('');
+
+                const addIdea = () => {
+                    const content = newIdeaInput.value.trim();
+                    if (!content) return;
+
+                    ideas.value.unshift({
+                        id: Date.now(),
+                        content: content,
+                        timestamp: Date.now()
+                    });
+                    newIdeaInput.value = '';
+                };
+
+                const deleteIdea = (id) => {
+                    ideas.value = ideas.value.filter(i => i.id !== id);
+                };
+
+                const formatTime = (timestamp) => {
+                    const date = new Date(timestamp);
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const hours = date.getHours().toString().padStart(2, '0');
+                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                    return `${month}-${day} ${hours}:${minutes}`;
+                };
+
+                // --- 数据导出与导入 ---
+                const exportData = () => {
+                    const data = {
+                        mindBuffer: mindBuffer.value,
+                        tasks: tasks.value,
+                        ideas: ideas.value,
+                        exportDate: new Date().toISOString()
+                    };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `deepflow_backup_${new Date().toISOString().slice(0,10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+
+                const importData = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const parsed = JSON.parse(e.target.result);
+                            if (confirm(`准备导入数据 (备份时间: ${parsed.exportDate || '未知'})？\n这将覆盖当前页面的所有数据！`)) {
+                                if (parsed.mindBuffer !== undefined) mindBuffer.value = parsed.mindBuffer;
+                                if (parsed.tasks) tasks.value = parsed.tasks;
+                                if (parsed.ideas) ideas.value = parsed.ideas;
+                                alert('数据导入成功！');
+                            }
+                        } catch (err) {
+                            alert('文件格式错误，无法导入');
+                            console.error(err);
+                        }
+                    };
+                    reader.readAsText(file);
+                    // Reset input so same file can be selected again
+                    event.target.value = '';
+                };
+
+                // --- 持久化 ---
+                const STORAGE_KEY = 'deepflow_data_v1';
+
+                const loadData = () => {
+                    const data = localStorage.getItem(STORAGE_KEY);
+                    if (data) {
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (parsed.mindBuffer) mindBuffer.value = parsed.mindBuffer;
+                            if (parsed.tasks) tasks.value = parsed.tasks;
+                            if (parsed.ideas) ideas.value = parsed.ideas;
+                        } catch (e) {
+                            console.error('Failed to load data', e);
+                        }
+                    }
+                };
+
+                const saveData = () => {
+                    const data = {
+                        mindBuffer: mindBuffer.value,
+                        tasks: tasks.value,
+                        ideas: ideas.value
+                    };
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                };
+
+                // 监听变化并保存
+                watch([mindBuffer, tasks, ideas], () => {
+                    saveData();
+                }, { deep: true });
+
+                onMounted(() => {
+                    loadData();
+                });
+
+                return {
+                    mindBuffer,
+                    newTaskInput,
+                    activeTasks,
+                    completedTasks,
+                    showCompleted,
+                    addTask,
+                    deleteTask,
+                    toggleSubtasks,
+                    addSubtask,
+                    deleteSubtask,
+                    newIdeaInput,
+                    ideas,
+                    addIdea,
+                    deleteIdea,
+                    formatTime,
+                    exportData,
+                    importData
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
