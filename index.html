@@ -6,7 +6,6 @@
     <title>DeepFlow Web</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body {
             background-color: #fdfbf7; /* Off-white / 米白色 */
@@ -101,10 +100,6 @@
                             <h2 class="text-xl font-bold text-gray-700">🧠 思维缓冲区</h2>
                             <div class="bg-white border border-gray-200 overflow-hidden flex flex-col min-h-[calc(100vh-140px)]">
                                 <textarea v-model="mindBuffer" class="flex-1 w-full px-8 py-6 bg-transparent resize-none focus:outline-none text-gray-700 placeholder-gray-400 leading-7 text-[16px]" placeholder="在这里书写一整页的脑暴，支持 Markdown 语法..."></textarea>
-                                <div class="px-8 py-6 border-t border-gray-100">
-                                    <div class="text-sm text-gray-400 mb-3">Markdown 预览</div>
-                                    <div class="text-gray-800 leading-7" v-html="mindBufferHtml"></div>
-                                </div>
                             </div>
                         </section>
 
@@ -271,13 +266,6 @@
                     get: () => currentPage.value ? currentPage.value.content.brainDump : '',
                     set: (v) => { if (currentPage.value) currentPage.value.content.brainDump = v; }
                 });
-                const mindBufferHtml = computed(() => {
-                    try {
-                        return marked.parse(mindBuffer.value || '');
-                    } catch {
-                        return (mindBuffer.value || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                    }
-                });
                 const tasks = computed({
                     get: () => currentPage.value ? currentPage.value.content.todos : [],
                     set: (v) => { if (currentPage.value) currentPage.value.content.todos = v; }
@@ -429,7 +417,6 @@
                     weekdayZh,
                     isTodayStr,
                     mindBuffer,
-                    mindBufferHtml,
                     newTaskInput,
                     activeTasks,
                     completedTasks,
