@@ -38,7 +38,28 @@
         </div>
 
         <div class="flex">
-            <aside class="bg-gray-50 md:w-1/5 w-4/5 md:static fixed inset-y-0 left-0 z-30 transform md:transform-none transition-transform" :class="{'-translate-x-full': !sidebarOpen && !isWide, 'translate-x-0': sidebarOpen || isWide}">
+            <aside class="w-48 bg-slate-800 text-slate-100 border-r border-slate-700 hidden md:flex flex-col sticky top-0 h-screen">
+                <div class="px-3 py-2 flex items-center justify-between border-b border-slate-700">
+                    <div class="text-sm font-semibold">2026</div>
+                    <button @click="timelineLocked = !timelineLocked" class="px-2 py-1 rounded-md bg-slate-700 hover:bg-slate-600">
+                        {{ timelineLocked ? '🔒' : '🔓' }}
+                    </button>
+                </div>
+                <div class="flex-1" :class="timelineLocked ? 'overflow-hidden' : 'overflow-y-auto'">
+                    <ul>
+                        <li v-for="day in daysToRender" :key="day.date" @click="editDay(day.date)" class="h-16 px-3 py-2 border-b border-slate-700 cursor-pointer"
+                            :class="isTodayStr(day.date) ? 'bg-blue-600 text-white' : 'hover:bg-slate-700/40'">
+                            <div class="text-sm font-medium">
+                                {{ displayDay(day.date) }} · {{ weekdayZh(day.date) }}
+                            </div>
+                            <div v-if="day.label" class="mt-1">
+                                <span class="text-xs px-2 py-0.5 rounded-full bg-slate-600 text-slate-100">{{ day.label }}</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </aside>
+            <aside class="bg-gray-50 w-64 md:static fixed inset-y-0 left-0 z-30 transform md:transform-none transition-transform" :class="{'-translate-x-full': !sidebarOpen && !isWide, 'translate-x-0': sidebarOpen || isWide}">
                 <div class="h-full flex flex-col border-r border-gray-200">
                     <div class="p-3 border-b border-gray-200">
                         <button @click="createPage" class="w-full px-3 py-2 bg-stone-700 hover:bg-stone-800 text-white rounded-md text-sm">➕ 新建页面</button>
@@ -60,7 +81,7 @@
                 </div>
             </aside>
 
-            <main class="md:w-4/5 w-full md:ml-4 p-4">
+            <main class="flex-1 w-full md:ml-4 p-4">
                 <div v-if="!currentPage" class="h-[60vh] flex items-center justify-center">
                     <div class="text-center space-y-2">
                         <div class="text-gray-400">点击左侧新建或选择页面</div>
@@ -173,6 +194,64 @@
                     const dd = String(d.getDate()).padStart(2, '0');
                     return `${y}-${m}-${dd}`;
                 };
+                const todayStr = () => new Date().toISOString().slice(0,10);
+                const timelineLocked = ref(true);
+                const timeline = ref([]);
+                const generateTimeline = () => {
+                    const start = new Date('2026-01-01T00:00:00');
+                    const end = new Date('2026-12-31T00:00:00');
+                    const arr = [];
+                    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                        const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                        arr.push({ date: ds, label: '' });
+                    }
+                    return arr;
+                };
+                const isTodayStr = (ds) => ds === todayStr();
+                const displayDay = (ds) => {
+                    const d = new Date(ds);
+                    const m = d.getMonth() + 1;
+                    const dd = String(d.getDate()).padStart(2, '0');
+                    return `${m}.${dd}`;
+                };
+                const weekdayZh = (ds) => {
+                    const w = new Date(ds).getDay();
+                    return ['周日','周一','周二','周三','周四','周五','周六'][w];
+                };
+                const daysToRender = computed(() => {
+                    if (timelineLocked.value) {
+                        const idx = timeline.value.findIndex(d => d.date >= todayStr());
+                        const start = idx >= 0 ? idx : 0;
+                        return timeline.value.slice(start, start + 30);
+                    }
+                    return timeline.value;
+                });
+                const editDay = (ds) => {
+                    const item = timeline.value.find(d => d.date === ds);
+                    if (!item) return;
+                    const val = window.prompt(`为 ${ds} 添加重要事项（留空则删除）`, item.label || '');
+                    if (val === null) return;
+                    item.label = (val || '').trim();
+                    saveTimeline();
+                };
+                const loadTimeline = () => {
+                    const raw = localStorage.getItem('deepflow_timeline');
+                    if (raw) {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            const base = generateTimeline();
+                            const map = new Map(parsed.map(x => [x.date, x.label || '']));
+                            timeline.value = base.map(d => ({ date: d.date, label: map.get(d.date) || '' }));
+                        } catch {
+                            timeline.value = generateTimeline();
+                        }
+                    } else {
+                        timeline.value = generateTimeline();
+                    }
+                };
+                const saveTimeline = () => {
+                    localStorage.setItem('deepflow_timeline', JSON.stringify(timeline.value));
+                };
                 const currentPage = computed(() => pages.value.find(p => p.id === selectedPageId.value) || null);
                 const mindBuffer = computed({
                     get: () => currentPage.value ? currentPage.value.content.brainDump : '',
@@ -283,6 +362,7 @@
                     }
                 };
                 watch(ideas, (v) => { if (currentPage.value) currentPage.value.content.insights = v; }, { deep: true });
+                watch(timeline, () => { saveTimeline(); }, { deep: true });
 
                 const loadData = () => {
                     const raw = localStorage.getItem('deepflow_pages_v1');
@@ -295,6 +375,7 @@
                     if (pages.value.length === 0) createPage();
                     if (!selectedPageId.value) selectedPageId.value = pages.value[0].id;
                     syncDerivedForCurrent();
+                    loadTimeline();
                 };
 
                 const saveData = () => {
@@ -319,6 +400,12 @@
                     isWide,
                     toggleSidebar,
                     formatDate,
+                    timelineLocked,
+                    daysToRender,
+                    editDay,
+                    displayDay,
+                    weekdayZh,
+                    isTodayStr,
                     mindBuffer,
                     newTaskInput,
                     activeTasks,
